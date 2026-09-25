@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>ころころ装置</title><link rel="stylesheet" href="style.css"></head>
+<body><div id="app"><canvas id="c"></canvas><a class="back" href="../index.html">一覧へ</a></div>
+<script src="common.js"></script>
+<script>
+// 05 ころころ装置
+// 「組み立てる → 眺める」の2フェーズ。3体の仕掛けキャラ（バネ／かぜ／ぶんれつ）を盤面に置いてGO。
+// 上から転がる玉がどのカップに入るかで得点。置き方は同じでも玉の当たり方で毎回結果が変わる。
+// 眺めるフェーズがそのまま動画になる（ピタゴラ的な「見てるだけで気持ちいい」を狙う）。
+const { c, ctx } = setupCanvas();
+const L = 16, R = 344, TOP = 92, FLOOR = 560, CUPY = 518, NCUP = 6, CUPW = (R - L) / NCUP;
+const GAD = [
+  { kind: 'spring', m: MASCOTS[1], label: 'バネ' },
+  { kind: 'fan', m: MASCOTS[3], label: 'かぜ' },
+  { kind: 'split', m: MASCOTS[4], label: 'ぶんれつ' },
+];
+let planks, pegs, cups, dropX, gadgets, marbles, phase, stage, total, runScore, drag, runT, released;
+const GO = { x: 316, y: 604, r: 26 };
+
+function genStage() {
+  planks = [...Array(4)].map((_, i) => {
+    const cx = rand(70, 290), cy = 170 + i * 80 + rand(-15, 15), len = rand(70, 110), a = rand(0.18, 0.4) * (Math.random() < 0.5 ? 1 : -1);
+    return { a: { x: cx - Math.cos(a) * len / 2, y: cy - Math.sin(a) * len / 2 }, b: { x: cx + Math.cos(a) * len / 2, y: cy + Math.sin(a) * len / 2 } };
+  });
+  pegs = [...Array(9)].map(() => ({ x: rand(40, 320), y: rand(150, 480), r: 5 }));
+  const mult = [1, 1, 2, 3, 5, 10].sort(() => Math.random() - 0.5);
+  cups = mult.map(m => ({ m, n: 0, glow: 0 }));
+  dropX = rand(60, 300);
+  gadgets = GAD.map((g, i) => ({ ...g, x: 50 + i * 72, y: 604, placed: false, dir: 1, pulse: 0 }));
+  marbles = []; phase = 'build'; runScore = 0; runT = 0; released = 0;
+}
+function reset() { stage = 1; total = 0; genStage(); }
+reset();
+
+const inBoard = p => p.y > TOP + 40 && p.y < CUPY - 30 && p.x > L + 10 && p.x < R - 10;
+c.addEventListener('pointerdown', e => {
+  const p = toLocal(c, e);
+  if (phase === 'result') { stage++; genStage(); return; }
+  if (phase !== 'build') return;
+  if (Math.hypot(p.x - GO.x, p.y - GO.y) < GO.r) { phase = 'run'; runT = 0; tone(520, 0.2, 'triangle', 0.1); return; }
+  const g = gadgets.find(g => Math.hypot(p.x - g.x, p.y - g.y) < 22);
+  if (g) drag = { g, s: p, moved: false };
+});
+c.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const p = toLocal(c, e);
+  if (Math.hypot(p.x - drag.s.x, p.y - drag.s.y) > 6) drag.moved = true;
+  if (drag.moved) { drag.g.x = p.x; drag.g.y = p.y; }
+});
+c.addEventListener('pointerup', () => {
+  if (!drag) return;
+  const g = drag.g;
+  if (!drag.moved && g.placed && g.kind === 'fan') { g.dir *= -1; tone(800, 0.08, 'square', 0.04); }
+  else if (inBoard(g)) { g.placed = true; tone(600, 0.08, 'triangle', 0.08); }
+  else { g.placed = false; const i = GAD.findIndex(x => x.kind === g.kind); g.x = 50 + i * 72; g.y = 604; }
+  drag = null;
+});
+
+function collideCircle(m, cx, cy, cr, rest) {
+  const dx = m.x - cx, dy = m.y - cy, d = Math.hypot(dx, dy);
+  if (d >= cr + m.r || d === 0) return false;
+  const nx = dx / d, ny = dy / d, vn = m.vx * nx + m.vy * ny;
+  m.x = cx + nx * (cr + m.r); m.y = cy + ny * (cr + m.r);
+  if (vn < 0) { m.vx -= (1 + rest) * vn * nx; m.vy -= (1 + rest) * vn * ny; }
+  return true;
+}
+function collideSeg(m, a, b, rest = 0.3) {
+  const abx = b.x - a.x, aby = b.y - a.y, t = clamp(((m.x - a.x) * abx + (m.y - a.y) * aby) / (abx * abx + aby * aby), 0, 1);
+  const px = a.x + abx * t, py = a.y + aby * t;
+  return collideCircle(m, px, py, 0, rest);
+}
+
+function step(dt) {
+  for (const m of marbles) {
+    m.vy += 700 * dt; m.x += m.vx * dt; m.y += m.vy * dt; m.rot += m.vx * dt * 0.05;
+    if (m.x < L + m.r) { m.x = L + m.r; m.vx = Math.abs(m.vx) * 0.5; }
+    if (m.x > R - m.r) { m.x = R - m.r; m.vx = -Math.abs(m.vx) * 0.5; }
+    for (const pl of planks) collideSeg(m, pl.a, pl.b, 0.25);
+    for (const pg of pegs) if (collideCircle(m, pg.x, pg.y, pg.r, 0.5) && Math.abs(m.vy) > 80) tone(900 + pg.x, 0.04, 'sine', 0.03);
+    for (let i = 1; i < NCUP; i++) collideSeg(m, { x: L + i * CUPW, y: CUPY - 4 }, { x: L + i * CUPW, y: FLOOR }, 0.3);
+    for (const g of gadgets) {
+      if (!g.placed) continue;
+      if (g.kind === 'spring' && collideCircle(m, g.x, g.y, 16, 1.0)) {
+        const d = Math.hypot(m.x - g.x, m.y - g.y); m.vx += (m.x - g.x) / d * 180; m.vy += (m.y - g.y) / d * 180;
+        g.pulse = 1; tone(300, 0.12, 'square', 0.05);
+      }
+      if (g.kind === 'fan' && Math.abs(m.y - g.y) < 28 && (m.x - g.x) * g.dir > 0 && Math.abs(m.x - g.x) < 110) m.vx += g.dir * 1100 * dt;
+      if (g.kind === 'split' && !m.split && Math.hypot(m.x - g.x, m.y - g.y) < 18 + m.r) {
+        m.split = true; g.pulse = 1;
+        marbles.push({ ...m, vx: -m.vx - 60, t: randi(4), seed: Math.random() * 9 });
+        m.vx += 60; burst(g.x, g.y, g.m.c, 10, 150, 0); tone(1000, 0.1, 'triangle', 0.06);
+      }
+    }
+    if (m.y > FLOOR - m.r - 1 && m.y > CUPY) {
+      const i = clamp(Math.floor((m.x - L) / CUPW), 0, NCUP - 1), cup = cups[i];
+      m.done = true; cup.n++; cup.glow = 1; const pts = cup.m * 10; runScore += pts;
+      popText(m.x, CUPY - 14, '×' + cup.m, cup.m >= 5 ? '#ffe14d' : '#fff', cup.m >= 5 ? 22 : 15);
+      burst(m.x, FLOOR - 10, MASCOTS[m.t].c, cup.m >= 5 ? 20 : 8, 180);
+      tone(noteHz(cup.m >= 10 ? 12 : cup.m + 3), 0.2, 'triangle', 0.08);
+      if (cup.m === 10) { shake(6); flash(0.3, '255,240,150'); }
+    }
+  }
+  marbles = marbles.filter(m => !m.done && m.y < H + 50);
+}
+
+function update(dt) {
+  for (const g of gadgets) g.pulse = Math.max(0, g.pulse - dt * 4);
+  for (const cp of cups) cp.glow = Math.max(0, cp.glow - dt * 2);
+  if (phase !== 'run') return;
+  runT += dt;
+  if (released < 6 && runT > released * 0.45) {
+    marbles.push({ x: dropX + rand(-4, 4), y: TOP + 20, vx: rand(-20, 20), vy: 0, r: 9, t: randi(4), rot: 0, seed: Math.random() * 9 });
+    released++; tone(440, 0.05, 'sine', 0.05);
+  }
+  for (let k = 0; k < 4; k++) step(dt / 4);
+  if ((released >= 6 && !marbles.length) || runT > 12) {
+    phase = 'result'; total += runScore;
+    const big = runScore >= 300;
+    banner(big ? '大当たり!' : 'RESULT', big ? '#ff6f91' : '#ffe14d', big ? 52 : 44, '+' + runScore);
+    if (big) flash(0.6);
+  }
+}
+
+function draw() {
+  ctx.save(); applyShake(ctx);
+  // 方眼紙＋木枠
+  ctx.fillStyle = '#f3ead7'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(90,140,200,0.18)'; ctx.lineWidth = 1;
+  for (let x = 0; x < W; x += 16) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = 0; y < H; y += 16) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  ctx.strokeStyle = '#b07a45'; ctx.lineWidth = 8; ctx.strokeRect(L - 4, TOP - 4, R - L + 8, FLOOR - TOP + 8);
+  // 投入口
+  ctx.fillStyle = '#b07a45'; ctx.beginPath(); ctx.moveTo(dropX - 22, TOP); ctx.lineTo(dropX + 22, TOP); ctx.lineTo(dropX + 10, TOP + 16); ctx.lineTo(dropX - 10, TOP + 16); ctx.fill();
+  // カップ
+  cups.forEach((cp, i) => {
+    const x = L + i * CUPW;
+    ctx.fillStyle = cp.m === 10 ? `rgba(255,210,60,${0.35 + cp.glow * 0.5})` : `rgba(120,170,230,${0.15 + cp.glow * 0.4})`;
+    ctx.fillRect(x + 2, CUPY, CUPW - 4, FLOOR - CUPY);
+    outlineText(ctx, '×' + cp.m, x + CUPW / 2, CUPY + 20, cp.m === 10 ? 18 : 14, cp.m === 10 ? '#ffe14d' : '#fff', 4);
+    if (cp.n) outlineText(ctx, cp.n + '個', x + CUPW / 2, CUPY + 36, 10, '#fff', 3);
+  });
+  ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 3;
+  for (let i = 1; i < NCUP; i++) { ctx.beginPath(); ctx.moveTo(L + i * CUPW, CUPY - 4); ctx.lineTo(L + i * CUPW, FLOOR); ctx.stroke(); }
+  // 障害物
+  ctx.lineCap = 'round'; ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 8;
+  for (const pl of planks) { ctx.beginPath(); ctx.moveTo(pl.a.x, pl.a.y); ctx.lineTo(pl.b.x, pl.b.y); ctx.stroke(); }
+  ctx.fillStyle = '#6b4a2b'; for (const pg of pegs) { ctx.beginPath(); ctx.arc(pg.x, pg.y, pg.r, 0, 7); ctx.fill(); }
+  // 仕掛けキャラ
+  for (const g of gadgets) {
+    if (g.kind === 'fan' && g.placed) {
+      ctx.strokeStyle = rgba('#4fa3ff', 0.45); ctx.lineWidth = 2;
+      for (let k = 0; k < 3; k++) {
+        const off = ((performance.now() / 8 + k * 36) % 108);
+        ctx.beginPath(); ctx.moveTo(g.x + g.dir * (14 + off), g.y - 14 + k * 14); ctx.lineTo(g.x + g.dir * (30 + off), g.y - 14 + k * 14); ctx.stroke();
+      }
+    }
+    if (g.kind === 'split' && g.placed) { ctx.strokeStyle = rgba('#b77dff', 0.5); ctx.setLineDash([3, 4]); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(g.x, g.y, 20, 0, 7); ctx.stroke(); ctx.setLineDash([]); }
+    drawMascot(ctx, g.x, g.y, 15, g.m, { scale: 1 + g.pulse * 0.3, expr: g.pulse ? 'happy' : 'normal', look: g.kind === 'fan' ? g.dir * 2 : 0 });
+    if (phase === 'build') outlineText(ctx, g.label + (g.kind === 'fan' && g.placed ? (g.dir > 0 ? '→' : '←') : ''), g.x, g.y + 24, 10, '#fff', 3);
+  }
+  for (const m of marbles) drawMascot(ctx, m.x, m.y, m.r, MASCOTS[m.t], { rot: m.rot, expr: 'wow', seed: m.seed });
+  drawFX(ctx);
+  ctx.restore();
+  hud(ctx, 'ころころ装置  STAGE ' + stage, total + (phase === 'run' ? runScore : 0), '', '#5a3a1a');
+  if (phase === 'build') {
+    ctx.fillStyle = '#ff6f91'; ctx.beginPath(); ctx.arc(GO.x, GO.y, GO.r, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#2b2140'; ctx.lineWidth = 3; ctx.stroke();
+    outlineText(ctx, 'GO', GO.x, GO.y, 18, '#fff', 4);
+    outlineText(ctx, '仕掛けキャラをドラッグで配置（かぜはタップで向き変更）', W / 2, 578, 10.5, '#5a3a1a', 0);
+  }
+  if (phase === 'result') outlineText(ctx, 'タップで次のステージ', W / 2, 604, 16, '#fff', 4);
+}
+loop(update, draw);
+</script></body></html>

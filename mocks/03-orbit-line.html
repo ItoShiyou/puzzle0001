@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>オービット・ライン</title><link rel="stylesheet" href="style.css"></head>
+<body><div id="app"><canvas id="c"></canvas><a class="back" href="../index.html">一覧へ</a></div>
+<script src="common.js"></script>
+<script>
+// 03 オービット・ライン（惑星直列）
+// 3本の軌道をキャラが別々の速さ・向きで回っている。指を置くと中心から光線の予告線、離すと発射。
+// 光線上の3キャラが全部同じなら「直列!!」で大量得点。2体一致でも小得点。バラバラだとエネルギーを失う。
+// 一瞬の「そろった！」を見極めるゲーム。軌道の回転で盤面は一度として同じにならない。
+const { c, ctx } = setupCanvas();
+const CX = W / 2, CY = 350, TYPES = MASCOTS.slice(0, 3);
+const ORBITS = [{ R: 62, n: 6, w: 0.8 }, { R: 108, n: 10, w: -0.5 }, { R: 152, n: 14, w: 0.3 }];
+let sats, score, energy, combo, aim, beams, time, over, timeLeft, stars;
+stars = [...Array(90)].map(() => ({ x: rand(0, W), y: rand(0, H), r: rand(0.4, 1.6), p: rand(0, 6) }));
+
+function reset() {
+  sats = [];
+  ORBITS.forEach((o, oi) => {
+    const off = rand(0, 7);
+    for (let i = 0; i < o.n; i++) sats.push({ o: oi, a: off + i / o.n * Math.PI * 2, t: randi(3), s: 1, respawn: 0 });
+  });
+  score = 0; energy = 5; combo = 0; aim = null; beams = []; time = 0; over = false; timeLeft = 60;
+}
+reset();
+
+const pos = s => { const R = ORBITS[s.o].R; return { x: CX + Math.cos(s.a) * R, y: CY + Math.sin(s.a) * R }; };
+function hitsOn(angle) {
+  // 各軌道で光線に最も近いキャラ（許容角 = キャラ半径ぶん）
+  return ORBITS.map((o, oi) => {
+    let best = null, bd = 1e9;
+    for (const s of sats) {
+      if (s.o !== oi || s.respawn > 0) continue;
+      let d = Math.abs(((s.a - angle) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
+      if (d < 24 / o.R && d < bd) { bd = d; best = s; }
+    }
+    return best;
+  });
+}
+
+c.addEventListener('pointerdown', e => { if (over) { reset(); return; } aim = toLocal(c, e); });
+c.addEventListener('pointermove', e => { if (aim) aim = toLocal(c, e); });
+c.addEventListener('pointerup', () => {
+  if (!aim || over) return;
+  const ang = Math.atan2(aim.y - CY, aim.x - CX); aim = null;
+  const hs = hitsOn(ang), got = hs.filter(Boolean);
+  const count = {}; got.forEach(s => count[s.t] = (count[s.t] || 0) + 1);
+  const [bt, bn] = Object.entries(count).sort((a, b) => b[1] - a[1])[0] || [null, 0];
+  let color = '#ffffff';
+  if (bn === 3) {
+    combo++; const pts = 300 * combo; score += pts; timeLeft += 3;
+    color = TYPES[bt].c;
+    banner('直列!!', color, 60, '+' + pts + (combo > 1 ? '  ' + combo + ' COMBO' : ''));
+    flash(0.8, '255,250,200'); shake(10);
+    [0, 4, 7, 11, 14].forEach((k, i) => tone(440 * Math.pow(2, k / 12), 0.5, 'triangle', 0.08, i * 0.05));
+    got.forEach(pop);
+  } else if (bn === 2) {
+    combo = 0; const pts = 60; score += pts; color = TYPES[bt].c;
+    got.filter(s => s.t == bt).forEach(pop);
+    popText(CX, CY - 180, 'ペア +' + pts, '#fff', 20); tone(660, 0.2, 'triangle', 0.1);
+  } else {
+    combo = 0; energy--; shake(6); flash(0.4, '255,60,90');
+    popText(CX, CY - 180, 'バラバラ… −1⚡', '#ff8fa3', 20); tone(140, 0.4, 'sawtooth', 0.07);
+    got.forEach(s => s.dizzy = 1);
+    if (energy <= 0) over = true;
+  }
+  beams.push({ a: ang, life: 0.45, color, big: bn === 3 });
+});
+function pop(s) {
+  const p = pos(s); burst(p.x, p.y, TYPES[s.t].c, 18, 240, 0);
+  s.respawn = 1.4;
+}
+
+function update(dt) {
+  if (over) return;
+  time += dt; timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; over = true; }
+  for (const s of stars) s.p += dt;
+  for (const s of sats) {
+    s.a += ORBITS[s.o].w * dt;
+    if (s.dizzy) s.dizzy = Math.max(0, s.dizzy - dt);
+    if (s.respawn > 0) { s.respawn -= dt; if (s.respawn <= 0) { s.t = randi(3); s.s = 0; } }
+    if (s.s < 1) s.s = Math.min(1, s.s + dt * 3);
+  }
+  for (const b of beams) b.life -= dt;
+  beams = beams.filter(b => b.life > 0);
+}
+
+function draw() {
+  ctx.save(); applyShake(ctx);
+  const g = ctx.createRadialGradient(CX, CY, 20, CX, CY, 420);
+  g.addColorStop(0, '#2a1a5e'); g.addColorStop(1, '#05030f');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (const s of stars) { ctx.globalAlpha = 0.5 + Math.sin(s.p * 2) * 0.3; ctx.fillStyle = '#fff'; ctx.fillRect(s.x, s.y, s.r, s.r); }
+  ctx.globalAlpha = 1;
+  for (const o of ORBITS) { ctx.strokeStyle = 'rgba(160,180,255,0.18)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(CX, CY, o.R, 0, 7); ctx.stroke(); }
+  // 予告線とロックオン
+  if (aim) {
+    const ang = Math.atan2(aim.y - CY, aim.x - CX), hs = hitsOn(ang);
+    const types = hs.filter(Boolean).map(s => s.t), all = types.length === 3 && types.every(t => t === types[0]);
+    ctx.strokeStyle = all ? '#fff36b' : 'rgba(255,255,255,0.35)'; ctx.lineWidth = all ? 3 : 1.5; ctx.setLineDash([6, 6]);
+    ctx.beginPath(); ctx.moveTo(CX, CY); ctx.lineTo(CX + Math.cos(ang) * 400, CY + Math.sin(ang) * 400); ctx.stroke(); ctx.setLineDash([]);
+    for (const s of hs) if (s) { const p = pos(s); ctx.strokeStyle = all ? '#fff36b' : '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, 20, 0, 7); ctx.stroke(); }
+    if (all) outlineText(ctx, 'そろった!', CX, 132, 22, '#fff36b', 5);
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  for (const b of beams) {
+    const a = b.life / 0.45;
+    ctx.strokeStyle = rgba(b.color, a); ctx.lineWidth = (b.big ? 26 : 8) * a + 2;
+    ctx.beginPath(); ctx.moveTo(CX, CY); ctx.lineTo(CX + Math.cos(b.a) * 420, CY + Math.sin(b.a) * 420); ctx.stroke();
+    ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(CX, CY); ctx.lineTo(CX + Math.cos(b.a) * 420, CY + Math.sin(b.a) * 420); ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  // 中心の惑星（これもキャラ）
+  const pg = ctx.createRadialGradient(CX - 8, CY - 8, 4, CX, CY, 30);
+  pg.addColorStop(0, '#ffe9a8'); pg.addColorStop(1, '#ff9a3c');
+  ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(CX, CY, 28, 0, 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,220,150,0.6)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(CX, CY, 42, 10, -0.3, 0, 7); ctx.stroke();
+  outlineText(ctx, '•ᴗ•', CX, CY + 2, 14, '#5a2d00', 0);
+  for (const s of sats) {
+    if (s.respawn > 0) continue;
+    const p = pos(s);
+    drawMascot(ctx, p.x, p.y, 13, TYPES[s.t], { scale: s.s, rot: s.dizzy ? Math.sin(time * 30) * 0.4 : 0, expr: s.dizzy ? 'wow' : 'normal', seed: s.a });
+  }
+  drawFX(ctx);
+  ctx.restore();
+  hud(ctx, 'オービット・ライン', score, '⚡'.repeat(energy) + '  ' + Math.ceil(timeLeft) + 's');
+  outlineText(ctx, '指を置いて狙う → 離して発射。3体そろえて直列！', W / 2, 600, 12, '#cfd8ff', 3);
+  if (over) endPanel(ctx, energy <= 0 ? 'エネルギー切れ' : 'TIME UP', score);
+}
+loop(update, draw);
+</script></body></html>

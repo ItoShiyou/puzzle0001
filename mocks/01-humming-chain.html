@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>ハミング・チェイン</title><link rel="stylesheet" href="style.css"></head>
+<body><div id="app"><canvas id="c"></canvas><a class="back" href="../index.html">一覧へ</a></div>
+<script src="common.js"></script>
+<script>
+// 01 ハミング・チェイン
+// 夜空をただようキャラたち。1ステージ1タップだけ「声の輪」を置ける。
+// 輪に触れたキャラは歌い出し、自分の輪を広げる→連鎖。音の高さ＝画面の高さなので、連鎖がそのままメロディになる。
+// 同じキャラ同士で伝わると「ハモり」で輪が大きくなる。
+const { c, ctx } = setupCanvas();
+const TYPES = MASCOTS.slice(0, 4);
+const WAVE = ['triangle', 'sine', 'square', 'sawtooth'];
+let chars, rings, notes, stage, score, tapped, sung, target, state, stars, chainN, stageScore;
+
+stars = [...Array(70)].map(() => ({ x: rand(0, W), y: rand(0, H), r: rand(0.5, 1.8), p: rand(0, 6) }));
+
+function setup() {
+  const n = 24 + stage * 3;
+  chars = [...Array(n)].map((_, i) => ({
+    x: rand(30, W - 30), y: rand(110, H - 40), vx: rand(-25, 25), vy: rand(-25, 25),
+    t: randi(4), sing: 0, done: false, seed: i,
+  }));
+  rings = []; notes = []; tapped = false; sung = 0; chainN = 0; stageScore = 0;
+  target = Math.min(n - 2, Math.round(n * (0.45 + stage * 0.06)));
+  state = 'play';
+}
+function reset() { stage = 1; score = 0; setup(); }
+reset();
+
+c.addEventListener('pointerdown', e => {
+  const p = toLocal(c, e);
+  if (state === 'clear') { stage++; setup(); return; }
+  if (state === 'fail') { setup(); return; }
+  if (state === 'over') { reset(); return; }
+  if (tapped) return;
+  tapped = true;
+  rings.push({ x: p.x, y: p.y, r: 0, max: 55, t: 0, col: '#ffffff', type: -1 });
+  tone(880, 0.3, 'sine', 0.12);
+});
+
+function sing(ch, fromType) {
+  ch.done = true; ch.sing = 1; sung++; chainN++;
+  const harmony = fromType === ch.t;
+  const pts = 10 * chainN * (harmony ? 2 : 1); score += pts; stageScore += pts;
+  // 高い位置ほど高い音
+  const idx = Math.round((1 - (ch.y - 100) / (H - 140)) * 11);
+  tone(noteHz(idx), harmony ? 0.6 : 0.35, WAVE[ch.t], harmony ? 0.1 : 0.07);
+  rings.push({ x: ch.x, y: ch.y, r: 0, max: harmony ? 72 : 46, t: 0, col: TYPES[ch.t].c, type: ch.t });
+  notes.push({ x: ch.x, y: ch.y - 20, life: 1.2, col: TYPES[ch.t].c, s: harmony ? '♫' : '♪' });
+  if (harmony) popText(ch.x, ch.y - 30, 'ハモり×2', '#fff', 12);
+  burst(ch.x, ch.y, TYPES[ch.t].c, 8, 120, 0);
+  if ([10, 20, 30].includes(chainN)) banner(chainN + ' VOICES!', '#7ff5ff', 42);
+}
+
+function update(dt) {
+  for (const s of stars) s.p += dt * 2;
+  for (const ch of chars) {
+    if (ch.sing > 0) { ch.sing += dt; continue; }
+    ch.x += ch.vx * dt; ch.y += ch.vy * dt;
+    if (ch.x < 24 || ch.x > W - 24) ch.vx *= -1;
+    if (ch.y < 100 || ch.y > H - 30) ch.vy *= -1;
+    ch.x = clamp(ch.x, 24, W - 24); ch.y = clamp(ch.y, 100, H - 30);
+  }
+  for (const r of rings) {
+    r.t += dt;
+    r.r = r.t < 0.5 ? r.max * (1 - Math.pow(1 - r.t / 0.5, 3)) : r.max;
+    if (r.t < 1.3) for (const ch of chars) {
+      if (!ch.done && Math.hypot(ch.x - r.x, ch.y - r.y) < r.r + 12) sing(ch, r.type);
+    }
+  }
+  rings = rings.filter(r => r.t < 1.7);
+  for (const n of notes) { n.life -= dt; n.y -= 30 * dt; }
+  notes = notes.filter(n => n.life > 0);
+  if (state === 'play' && tapped && !rings.length) {
+    if (sung >= target) {
+      const bonus = (sung - target) * 50 + (sung === chars.length ? 1000 : 0);
+      score += bonus; state = 'clear';
+      banner(sung === chars.length ? 'パーフェクト合唱!!' : 'STAGE CLEAR', '#ffe14d', sung === chars.length ? 34 : 42, bonus ? '+' + bonus + ' ボーナス' : '');
+      flash(0.6, '180,240,255');
+      [0, 4, 7, 12].forEach((k, i) => tone(523.25 * Math.pow(2, k / 12), 0.5, 'triangle', 0.08, i * 0.09));
+    } else { state = 'fail'; tone(196, 0.5, 'sawtooth', 0.05); }
+  }
+}
+
+function draw() {
+  ctx.save(); applyShake(ctx);
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#0b0730'); g.addColorStop(0.6, '#1c1260'); g.addColorStop(1, '#3a1f6e');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (const s of stars) { ctx.globalAlpha = 0.4 + Math.sin(s.p) * 0.3; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill(); }
+  ctx.globalAlpha = 1;
+  // 音階ガイド（左端）
+  for (let i = 0; i < 12; i++) {
+    const y = H - 40 - i * (H - 140) / 11;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(0, y - 0.5, W, 1);
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  for (const r of rings) {
+    const a = r.t < 1.3 ? 1 : 1 - (r.t - 1.3) / 0.4;
+    ctx.strokeStyle = rgba(r.col, 0.9 * a); ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, 7); ctx.stroke();
+    ctx.fillStyle = rgba(r.col, 0.12 * a); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  for (const ch of chars) {
+    const bounce = ch.sing > 0 && ch.sing < 0.6 ? Math.sin(ch.sing * 20) * 0.15 * (1 - ch.sing / 0.6) : 0;
+    if (ch.done) { ctx.fillStyle = rgba(TYPES[ch.t].c, 0.25); ctx.beginPath(); ctx.arc(ch.x, ch.y, 20, 0, 7); ctx.fill(); }
+    drawMascot(ctx, ch.x, ch.y, 13, TYPES[ch.t], { expr: ch.done ? 'happy' : 'sleep', squash: ch.done ? bounce : undefined, seed: ch.seed });
+  }
+  for (const n of notes) { ctx.globalAlpha = Math.min(1, n.life); outlineText(ctx, n.s, n.x, n.y, 18, n.col, 3); }
+  ctx.globalAlpha = 1;
+  drawFX(ctx);
+  ctx.restore();
+  hud(ctx, 'ハミング・チェイン  STAGE ' + stage, score, '♪ ' + sung + ' / ' + target);
+  // 進捗バー
+  ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(14, 72, W - 28, 6);
+  ctx.fillStyle = sung >= target ? '#7ff5ff' : '#ffe14d'; ctx.fillRect(14, 72, (W - 28) * Math.min(1, sung / chars.length), 6);
+  ctx.fillStyle = '#fff'; ctx.fillRect(14 + (W - 28) * target / chars.length - 1, 68, 2, 14);
+  if (!tapped && state === 'play') outlineText(ctx, 'タップは1回だけ。眠っているキャラを歌わせよう', W / 2, 96, 12, '#fff', 3);
+  if (state === 'clear') outlineText(ctx, 'タップで次のステージ', W / 2, H * 0.55, 16, '#fff', 4);
+  if (state === 'fail') { endPanel(ctx, 'あと ' + (target - sung) + ' 人…', score, 'タップで配置を変えて再挑戦'); }
+}
+loop(update, draw);
+</script></body></html>
