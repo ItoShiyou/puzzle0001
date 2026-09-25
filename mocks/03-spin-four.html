@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>くるりん4</title><link rel="stylesheet" href="style.css"></head>
+<body><div id="app"><canvas id="c"></canvas><a class="back" href="../index.html">一覧へ</a></div>
+<script src="common.js"></script>
+<script>
+// 03 くるりん4
+// マスの“すきま（4マスの交点）”をタップすると、その周りの4体が時計回りにくるっと回る。
+// 同じキャラで2×2の四角ができると、その四角とつながっている同じキャラ全部がまとめて消える。
+// 落ちてきたキャラで四角ができれば連鎖。→ 回す順番を読む、ルービックキューブ的パズル。
+const board = new Board({ cols: 7, rows: 8, cell: 46, x0: 19, y0: 140, types: 4 });
+let chain = 0, hover = null;
+
+function squares() {
+  const hit = new Set();
+  for (let r = 0; r < board.rows - 1; r++) for (let c = 0; c < board.cols - 1; c++) {
+    const a = board.get(r, c), b = board.get(r, c + 1), d = board.get(r + 1, c), e = board.get(r + 1, c + 1);
+    if (a && b && d && e && !a.sp && [b, d, e].every(q => !q.sp && q.t === a.t)) hit.add(r * 99 + c);
+  }
+  return [...hit].map(k => ({ r: Math.floor(k / 99), c: k % 99 }));
+}
+function floodFrom(sqs) {
+  const seen = new Set(), out = [];
+  const st = sqs.map(({ r, c }) => ({ r, c }));
+  while (st.length) {
+    const { r, c } = st.pop(), k = r * 99 + c;
+    if (seen.has(k)) continue;
+    const p = board.get(r, c); if (!p) continue;
+    seen.add(k); out.push({ r, c });
+    for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const q = board.get(r + dr, c + dc); if (q && !q.sp && q.t === p.t) st.push({ r: r + dr, c: c + dc }); }
+  }
+  return out;
+}
+function nearestCross(p) {
+  const ic = Math.round((p.x - board.x0) / board.cell), ir = Math.round((p.y - board.y0) / board.cell);
+  if (ic < 1 || ic > board.cols - 1 || ir < 1 || ir > board.rows - 1) return null;
+  return { ir, ic };
+}
+
+Game.init({
+  id: 'rotate', title: 'くるりん4', board, bg: ['#ffe7c2', '#ffd1dc'],
+  howto: 'マスの<b>すきま（交点）をタップ</b>すると、まわりの4体が<b>時計回りに回転</b>。<br>同じキャラで<b>2×2の四角</b>ができると、<b>つながっている同じキャラ全部</b>が消える！落ちてきて四角ができれば連鎖。',
+  onStart() {
+    let sq; while ((sq = squares()).length) for (const { r, c } of sq) board.grid[r][c].t = randi(4);
+    chain = 0;
+  },
+  onDown(p) {
+    if (board.busy()) return;
+    const x = nearestCross(p); if (!x) return;
+    const { ir, ic } = x, C = board.cell;
+    const cells = [[ir - 1, ic - 1], [ir - 1, ic], [ir, ic], [ir, ic - 1]];
+    if (cells.some(([r, c]) => !board.get(r, c))) return;
+    const ps = cells.map(([r, c]) => board.get(r, c));
+    // 時計回り：左上→右上→右下→左下→左上
+    const moves = [[0, C], [-C, 0], [0, -C], [C, 0]];
+    cells.forEach(([r, c], i) => { const src = ps[(i + 3) % 4]; board.grid[r][c] = src; src.ox = moves[i][0]; src.oy = moves[i][1]; });
+    chain = 0; board.needSettle = true; hover = { ...x, t: 0.25 };
+    tone(500, 0.06, 'triangle', 0.06);
+  },
+  onSettle() {
+    const sq = squares(); if (!sq.length) { chain = 0; return; }
+    const cells = floodFrom(sq.flatMap(({ r, c }) => [{ r, c }]));
+    chain++;
+    const cx = cells.reduce((s, q) => s + board.pos(q.r, q.c).x, 0) / cells.length, cy = cells.reduce((s, q) => s + board.pos(q.r, q.c).y, 0) / cells.length;
+    const n = board.remove(cells);
+    Game.scoreClear(n, cx, cy, 1 + (chain - 1) * 0.5, chain > 1 ? chain + '連鎖' : '');
+    if (chain >= 2) { banner(chain + ' 連鎖!', '#ff6f91', 40 + chain * 4); shake(3 + chain * 2); }
+    if (n >= 7) { const q = cells[randi(cells.length)]; Game.maybeBomb(n, q.r, q.c); }
+    board.collapse();
+  },
+  onUpdate(dt) { if (hover) { hover.t -= dt; if (hover.t <= 0) hover = null; } },
+  drawExtra(ctx) {
+    ctx.fillStyle = 'rgba(90,60,120,0.25)';
+    for (let r = 1; r < board.rows; r++) for (let c = 1; c < board.cols; c++) { ctx.beginPath(); ctx.arc(board.x0 + c * board.cell, board.y0 + r * board.cell, 3, 0, 7); ctx.fill(); }
+    if (hover) {
+      const x = board.x0 + hover.ic * board.cell, y = board.y0 + hover.ir * board.cell;
+      ctx.strokeStyle = `rgba(255,255,255,${hover.t * 4})`; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(x, y, board.cell * 0.9, -2, 1.5); ctx.stroke();
+    }
+  },
+});
+</script></body></html>

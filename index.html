@@ -11,29 +11,29 @@ a.card{display:block;text-decoration:none;color:inherit;background:linear-gradie
 .card h2{margin:0 0 6px;font-size:19px;text-shadow:0 2px 0 rgba(0,0,0,.3)}
 .card .n{font-size:12px;opacity:.85}
 .card dl{margin:8px 0 0;font-size:12.5px;line-height:1.55;display:grid;grid-template-columns:4.5em 1fr;gap:2px 8px}
-.card dt{font-weight:800;opacity:.9}.card dd{margin:0}
+.card dt{font-weight:800;opacity:.9}.card{color:#2b2140}.loop{background:#241a45;border-radius:14px;padding:12px 14px;font-size:12.5px;line-height:1.7;margin-bottom:16px}.loop small{opacity:.7}.card dd{margin:0}
 </style></head>
 <body><main>
-<h1>🧩 パズルゲーム モック 5案</h1>
-<p class="lead">v2：既存ヒット作の型から離れ、「操作そのものが新しい」5案。スマホ/iPad縦持ち前提、同じ盤面で毎回結果が変わる、キャラ（IP）差し替え可能、ショート動画映え。キャラはオリジナルの仮マスコットです（音が出ます）。</p>
+<h1>🧩 パズルゲーム モック 5案（v3）</h1>
+<p class="lead">v3：「毎日ついやりたくなる」ことを最優先にしたパズル5案。5つとも同じ<b>やり込みの仕組み</b>で動き、盤面のルール（どう考えるか）だけが違います。</p>
+<div class="loop"><b>共通のやり込みの仕組み</b><br>① 1プレイ<b>60秒</b>で、盤面は無限に補充される<br>② 大きく消すと<b>ボム</b>。消すほど<b>スキル</b>と<b>フィーバー（得点2倍）</b>がたまる<br>③ スコアで<b>コイン</b>獲得 → <b>なかまガチャ</b>で新キャラ、<b>レベルアップ</b>でスキル強化<br>④ <b>きょうのミッション</b>（毎日3つ）とベストスコア更新<br><small>キャラごとにスキルが違う＝IPキャラを載せるほどやり込みが広がる設計。コインとキャラは5つのパズルで共通です（このブラウザに保存）。</small></div>
+<a class="card" href="mocks/01-loop-link.html" style="--a:#bfe6ff;--b:#ffb3cf">
+<div class="n">PUZZLE 01</div><h2>わっかつなぎ</h2>
+<dl><dt>ルール</dt><dd>同じキャラをなぞって3つ以上で消える。<b>なぞった線を始点に戻して閉じると「わっか」</b>になり、内側のキャラも色に関係なく全部消える。</dd><dt>考えどころ</dt><dd>盤面から「輪を作れる場所」を探す</dd></dl></a>
 
-<a class="card" href="mocks/01-humming-chain.html" style="--a:#0b0730;--b:#3a1f6e">
-<div class="n">MOCK 01</div><h2>ハミング・チェイン</h2>
-<dl><dt>操作</dt><dd>1ステージにつき1回だけタップ</dd><dt>ルール</dt><dd>タップすると声の輪が広がり、触れたキャラが歌い出して次の輪を広げる。音の高さ＝画面の高さ。同じキャラ同士で伝わるとハモって輪が大きくなる</dd><dt>独自性</dt><dd>連鎖が<b>そのまま毎回違う曲</b>になる。音が主役のパズル</dd><dt>動画映え</dt><dd>音付きで伸びるショート向け。1タップで夜空が合唱に変わる</dd><dt>IP展開</dt><dd>キャラごとに楽器や声。コラボ曲やキャラソンを音素材に使える</dd></dl></a>
+<a class="card" href="mocks/02-evolve-chain.html" style="--a:#bfe8b0;--b:#ffe07a">
+<div class="n">PUZZLE 02</div><h2>しんかチェーン</h2>
+<dl><dt>ルール</dt><dd><b>同じキャラ・同じレベル</b>をなぞると、最後のマスで1段階しんか。<b>Lv★をタップすると同じキャラ全消し</b>。</dd><dt>考えどころ</dt><dd>進化キャラをどこに置くか、いつ弾けさせるか</dd></dl></a>
 
-<a class="card" href="mocks/02-ink-flick.html" style="--a:#e9dcc4;--b:#ff6f91">
-<div class="n">MOCK 02</div><h2>インク・フリック</h2>
-<dl><dt>操作</dt><dd>キャラを引っぱって弾く（6回）</dd><dt>ルール</dt><dd>転がった跡がインクの線になり、線が交差して囲むと中が塗りつぶされる。塗った割合がスコア</dd><dt>独自性</dt><dd>結果が点数ではなく<b>一枚の絵</b>として残る</dd><dt>動画映え</dt><dd>完成した絵をそのまま投稿でき、プレイヤーごとに違う作品になる</dd><dt>IP展開</dt><dd>キャラごとの塗りスキル（太筆、よく跳ねる、止まるとドバッ）。インクの色や柄を作品テーマにできる</dd></dl></a>
+<a class="card" href="mocks/03-spin-four.html" style="--a:#ffd9a0;--b:#ffb3c6">
+<div class="n">PUZZLE 03</div><h2>くるりん4</h2>
+<dl><dt>ルール</dt><dd>マスの<b>すきまをタップすると4体が時計回りに回転</b>。2×2の四角ができると、つながった同じキャラ全部が消える。</dd><dt>考えどころ</dt><dd>回す順番を読む。落下で連鎖</dd></dl></a>
 
-<a class="card" href="mocks/03-orbit-line.html" style="--a:#05030f;--b:#2a1a5e">
-<div class="n">MOCK 03</div><h2>オービット・ライン</h2>
-<dl><dt>操作</dt><dd>指を置いて狙い、離して光線を発射</dd><dt>ルール</dt><dd>3本の軌道をキャラが別々の速さで回っている。光線上の3体がそろうと「直列!!」</dd><dt>独自性</dt><dd>盤面が常に回転していて、<b>そろう一瞬を見極める</b>観察型パズル</dd><dt>動画映え</dt><dd>そろった瞬間に宇宙を貫くビーム。「今だ！」の緊張感</dd><dt>IP展開</dt><dd>中心の惑星をメインキャラに、軌道のキャラを仲間やライバルにできる</dd></dl></a>
+<a class="card" href="mocks/04-push-in.html" style="--a:#b9dcff;--b:#d3c2ff">
+<div class="n">PUZZLE 04</div><h2>おしだしパズル</h2>
+<dl><dt>ルール</dt><dd><b>手持ちキャラを端から押し込み</b>、反対側から出たキャラが次の手持ちになる。縦横3つそろうと消える。</dd><dt>考えどころ</dt><dd>次の手持ちまで読む先読み型</dd></dl></a>
 
-<a class="card" href="mocks/04-bubble-catch.html" style="--a:#8fd3ff;--b:#ffd6ec">
-<div class="n">MOCK 04</div><h2>バブル・キャッチ</h2>
-<dl><dt>操作</dt><dd>長押しでしゃぼん玉がふくらみ、離すと空へ昇る</dd><dt>ルール</dt><dd>玉に触れたキャラを中に閉じ込める。同じキャラが多いほど高得点（個数の2乗）。トゲトゲに触れると割れる</dd><dt>独自性</dt><dd><b>どこまで欲張るか</b>のチキンレース</dd><dt>動画映え</dt><dd>ぎりぎりまでふくらませる手に汗にぎる場面と、大漁の気持ちよさ</dd><dt>IP展開</dt><dd>しゃぼん玉の中でキャラがわちゃわちゃする様子は、グッズやスタンプにもしやすい</dd></dl></a>
-
-<a class="card" href="mocks/05-koro-machine.html" style="--a:#f3ead7;--b:#b07a45">
-<div class="n">MOCK 05</div><h2>ころころ装置</h2>
-<dl><dt>操作</dt><dd>仕掛けキャラをドラッグで置いてGO</dd><dt>ルール</dt><dd>バネ、かぜ、ぶんれつの3体を置くと、上から転がる玉がどのカップ（×1〜×10）に入るかで得点</dd><dt>独自性</dt><dd><b>組み立てる→眺める</b>の2段構成。同じ配置でも毎回結果が変わる</dd><dt>動画映え</dt><dd>眺めるフェーズがそのまま動画になる。ピタゴラ的な気持ちよさ</dd><dt>IP展開</dt><dd>仕掛けを作品のギミックやキャラの能力にする。ステージを作品の場面にする</dd></dl></a>
+<a class="card" href="mocks/05-sandwich.html" style="--a:#bfeaff;--b:#ffe0b0">
+<div class="n">PUZZLE 05</div><h2>はさみけし</h2>
+<dl><dt>ルール</dt><dd><b>同じキャラ2体で一直線にはさむ</b>と、あいだのキャラは色に関係なく全部消える。</dd><dt>考えどころ</dt><dd>長くはさめるペアを探す（オセロ的）</dd></dl></a>
 </main></body></html>

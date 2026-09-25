@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>はさみけし</title><link rel="stylesheet" href="style.css"></head>
+<body><div id="app"><canvas id="c"></canvas><a class="back" href="../index.html">一覧へ</a></div>
+<script src="common.js"></script>
+<script>
+// 05 はさみけし
+// 同じキャラ2体で、あいだのキャラを“はさむ”。縦・横・ななめの一直線に、同じキャラから同じキャラへスワイプ。
+// はさんだ2体と、あいだのキャラ全部（色は関係なし）が消える。あいだも全部同じキャラなら「そろいばさみ」で得点2倍。
+// → オセロ的に「長くはさめる同キャラのペア」を盤面から探すパズル。
+const board = new Board({ cols: 7, rows: 8, cell: 46, x0: 19, y0: 140, types: 5 });
+let start = null, end = null;
+
+function lineCells(a, b) {
+  const dr = b.r - a.r, dc = b.c - a.c, L = Math.max(Math.abs(dr), Math.abs(dc));
+  if (L < 2 || !(dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc))) return null;
+  const sr = Math.sign(dr), sc = Math.sign(dc), out = [];
+  for (let k = 0; k <= L; k++) out.push({ r: a.r + sr * k, c: a.c + sc * k });
+  return out;
+}
+function judge() {
+  if (!start || !end) return null;
+  const cells = lineCells(start, end); if (!cells) return null;
+  const a = board.get(start.r, start.c), b = board.get(end.r, end.c);
+  if (!a || !b || a.sp || b.sp || a.t !== b.t) return { cells, ok: false };
+  const mids = cells.slice(1, -1).map(q => board.get(q.r, q.c));
+  return { cells, ok: true, all: mids.every(p => p && !p.sp && p.t === a.t), t: a.t };
+}
+
+Game.init({
+  id: 'sandwich', title: 'はさみけし', board, bg: ['#e2f7ff', '#fff0d6'],
+  howto: '<b>同じキャラ2体</b>で、あいだを<b>はさむ</b>ようにスワイプ（縦・横・ななめの一直線）。<br>はさんだ<b>あいだのキャラは色に関係なく全部</b>消える。あいだも同じキャラなら「そろいばさみ」で2倍！',
+  onStart() { start = end = null; },
+  onDown(p) {
+    if (board.busy()) return;
+    const cl = board.cellAt(p.x, p.y); if (!cl || !board.get(cl.r, cl.c)) return;
+    start = cl; end = null; board.get(cl.r, cl.c).sel = true;
+  },
+  onMove(p) {
+    if (!start) return;
+    const cl = board.cellAt(p.x, p.y);
+    if (cl && (!end || cl.r !== end.r || cl.c !== end.c)) { end = cl; const j = judge(); if (j && j.ok) tone(noteHz(4 + j.cells.length), 0.05, 'sine', 0.05); }
+  },
+  onUp() {
+    if (!start) return;
+    const j = judge(); board.get(start.r, start.c) && (board.get(start.r, start.c).sel = false);
+    start = end = null;
+    if (!j || !j.ok) return;
+    const last = j.cells[j.cells.length - 1], { x, y } = board.pos(last.r, last.c);
+    const n = board.remove(j.cells);
+    Game.scoreClear(n, x, y, j.all ? 2 : 1, j.all ? 'そろいばさみ' : '');
+    if (j.all) { banner('そろいばさみ!', MASCOTS[j.t].c, 40, '得点2倍'); shake(5); }
+    Game.maybeBomb(n, last.r, last.c);
+    board.collapse();
+  },
+  drawExtra(ctx) {
+    if (!start) return;
+    const s = board.pos(start.r, start.c);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(s.x, s.y, board.cell * 0.48, 0, 7); ctx.stroke();
+    const j = judge(); if (!j) return;
+    const e = board.pos(end.r, end.c), col = j.ok ? MASCOTS[j.t].c : '#999';
+    ctx.fillStyle = rgba(j.ok ? MASCOTS[j.t].c : '#888888', j.ok ? 0.3 : 0.15);
+    for (const q of j.cells) { const P = board.pos(q.r, q.c); ctx.beginPath(); ctx.roundRect(P.x - 21, P.y - 21, 42, 42, 10); ctx.fill(); }
+    for (const [w, c] of [[12, '#fff'], [6, col]]) { ctx.strokeStyle = c; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke(); }
+    if (j.ok) outlineText(ctx, j.cells.length + '個' + (j.all ? ' そろい!' : ''), e.x, e.y - 30, 16, '#fff', 4);
+  },
+});
+</script></body></html>

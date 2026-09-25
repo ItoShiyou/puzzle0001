@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>おしだしパズル</title><link rel="stylesheet" href="style.css"></head>
+<body><div id="app"><canvas id="c"></canvas><a class="back" href="../index.html">一覧へ</a></div>
+<script src="common.js"></script>
+<script>
+// 04 おしだしパズル
+// 手持ちのキャラを、盤面の端（矢印）から押し込む。列がずれて、反対側から押し出されたキャラが次の手持ちになる。
+// 縦か横に3つ以上そろうと消えて、空いたマスに新しいキャラが湧く（湧いたキャラでそろえば連鎖）。
+// → 「次に何が出てくるか」まで読める、先読み型のパズル。
+const N = 6, CELL = 48;
+const board = new Board({ cols: N, rows: N, cell: CELL, x0: (W - N * CELL) / 2, y0: 190, types: 5, gravity: false });
+let hand, handFly = 0, chain = 0;
+const arrows = [];
+for (let i = 0; i < N; i++) {
+  arrows.push({ side: 'L', i, x: board.x0 - 22, y: board.y0 + i * CELL + CELL / 2 });
+  arrows.push({ side: 'R', i, x: board.x0 + N * CELL + 22, y: board.y0 + i * CELL + CELL / 2 });
+  arrows.push({ side: 'T', i, x: board.x0 + i * CELL + CELL / 2, y: board.y0 - 22 });
+  arrows.push({ side: 'B', i, x: board.x0 + i * CELL + CELL / 2, y: board.y0 + N * CELL + 22 });
+}
+
+function lines() {
+  const hit = new Set();
+  const g = (r, c) => { const p = board.get(r, c); return p && !p.sp ? p.t : -1; };
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const t = g(r, c); if (t < 0) continue;
+    let k = 1; while (g(r, c + k) === t) k++; if (k >= 3) for (let j = 0; j < k; j++) hit.add(r * 99 + c + j);
+    k = 1; while (g(r + k, c) === t) k++; if (k >= 3) for (let j = 0; j < k; j++) hit.add((r + j) * 99 + c);
+  }
+  return [...hit].map(k => ({ r: Math.floor(k / 99), c: k % 99 }));
+}
+
+function push(a) {
+  const C = CELL, gr = board.grid;
+  let out;
+  if (a.side === 'L') { out = gr[a.i].pop(); gr[a.i].unshift(hand); gr[a.i].forEach(p => p.ox -= C); }
+  if (a.side === 'R') { out = gr[a.i].shift(); gr[a.i].push(hand); gr[a.i].forEach(p => p.ox += C); }
+  if (a.side === 'T') { out = gr[N - 1][a.i]; for (let r = N - 1; r > 0; r--) gr[r][a.i] = gr[r - 1][a.i]; gr[0][a.i] = hand; for (let r = 0; r < N; r++) gr[r][a.i].oy -= C; }
+  if (a.side === 'B') { out = gr[0][a.i]; for (let r = 0; r < N - 1; r++) gr[r][a.i] = gr[r + 1][a.i]; gr[N - 1][a.i] = hand; for (let r = 0; r < N; r++) gr[r][a.i].oy += C; }
+  out.ox = out.oy = 0; out.sel = false;
+  hand = out; handFly = 1;
+  chain = 0; board.needSettle = true;
+  tone(420, 0.08, 'square', 0.05);
+}
+
+Game.init({
+  id: 'push', title: 'おしだしパズル', board, bg: ['#d8ecff', '#e8dcff'],
+  howto: '上の<b>手持ちキャラ</b>を、盤面まわりの<b>矢印から押し込む</b>。列がずれて、<b>反対側から出たキャラが次の手持ち</b>になる。<br>縦横<b>3つ以上そろうと消える</b>。空いたマスに湧いたキャラでそろえば連鎖！',
+  onStart() {
+    let l; while ((l = lines()).length) for (const { r, c } of l) board.grid[r][c].t = randi(5);
+    hand = board.newPiece(); chain = 0;
+  },
+  onDown(p) {
+    if (board.busy()) return;
+    const a = arrows.find(a => Math.hypot(p.x - a.x, p.y - a.y) < 20);
+    if (a) push(a);
+  },
+  onSettle() {
+    const l = lines(); if (!l.length) { chain = 0; return; }
+    chain++;
+    const cx = l.reduce((s, q) => s + board.pos(q.r, q.c).x, 0) / l.length, cy = l.reduce((s, q) => s + board.pos(q.r, q.c).y, 0) / l.length;
+    const n = board.remove(l);
+    Game.scoreClear(n, cx, cy, 1 + (chain - 1) * 0.6, chain > 1 ? chain + '連鎖' : '');
+    if (chain >= 2) { banner(chain + ' 連鎖!', '#6b8cff', 40 + chain * 4); shake(3 + chain * 2); }
+    if (n >= 5) { const q = l[randi(l.length)]; const b = board.newPiece(); b.sp = 'bomb'; b.s = 0; board.grid[q.r][q.c] = b; }
+    board.collapse();
+  },
+  onUpdate(dt) { handFly = Math.max(0, handFly - dt * 4); },
+  drawExtra(ctx) {
+    for (const a of arrows) {
+      ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.beginPath(); ctx.arc(a.x, a.y, 13, 0, 7); ctx.fill();
+      ctx.fillStyle = MASCOTS[hand ? hand.t : 0].c;
+      const d = { L: 0, R: Math.PI, T: Math.PI / 2, B: -Math.PI / 2 }[a.side];
+      ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(d); ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-4, -6); ctx.lineTo(-4, 6); ctx.closePath(); ctx.fill(); ctx.restore();
+    }
+    // 手持ち
+    if (hand) {
+      const hx = W / 2, hy = 110;
+      ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.roundRect(hx - 60, hy - 30, 120, 60, 18); ctx.fill();
+      outlineText(ctx, 'てもち', hx - 34, hy, 12, '#fff', 3);
+      GAME.drawPiece(ctx, hx + 20, hy - handFly * 60, hand, 0, 0, { scale: 1.2 });
+    }
+  },
+});
+</script></body></html>

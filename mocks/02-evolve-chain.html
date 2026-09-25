@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>しんかチェーン</title><link rel="stylesheet" href="style.css"></head>
+<body><div id="app"><canvas id="c"></canvas><a class="back" href="../index.html">一覧へ</a></div>
+<script src="common.js"></script>
+<script>
+// 02 しんかチェーン
+// 「同じキャラ」かつ「同じレベル」を3つ以上なぞると、最後になぞったマスに1段階進化した1体が残る（6つ以上なら2段階）。
+// Lv4（MAX）になったキャラはタップすると、盤面にいる同じキャラを全部まきこんで消える。
+// → 進化キャラを“どこに置くか”“いつ弾けさせるか”を考える、育成×パズル。
+const board = new Board({ cols: 7, rows: 8, cell: 46, x0: 19, y0: 140, types: 4, make: () => ({ lv: Math.random() < 0.18 ? 2 : 1 }) });
+let path = null;
+const adj = (a, b) => Math.max(Math.abs(a.r - b.r), Math.abs(a.c - b.c)) === 1;
+const same = (a, b) => a.r === b.r && a.c === b.c;
+function hitCell(p) {
+  const cl = board.cellAt(p.x, p.y); if (!cl) return null;
+  const q = board.pos(cl.r, cl.c);
+  return Math.hypot(p.x - q.x, p.y - q.y) < board.cell * 0.46 ? cl : null;
+}
+function unselect() { for (const q of board.all()) q.p.sel = false; }
+
+function drawPiece(ctx, x, y, p, r, c, o = {}) {
+  const lv = p.lv || 1, rad = board.cell * (0.3 + lv * 0.045);
+  if (lv >= 4) {
+    ctx.save(); ctx.globalAlpha = (o.alpha ?? 1) * (0.5 + Math.sin(performance.now() / 200) * 0.2);
+    ctx.fillStyle = '#fff36b'; ctx.beginPath(); star(ctx, x, y, board.cell * 0.55, board.cell * 0.36, 10); ctx.fill(); ctx.restore();
+  }
+  drawMascot(ctx, x, y, rad, MASCOTS[p.t], { scale: (o.scale || 1) * p.s, alpha: o.alpha, expr: lv >= 4 ? 'happy' : p.sel ? 'wow' : 'normal', seed: r * 7 + c });
+  if (o.alpha == null) {
+    ctx.fillStyle = lv >= 4 ? '#ffb000' : '#3b2a55'; ctx.beginPath(); ctx.arc(x + board.cell * 0.3, y + board.cell * 0.28, 8, 0, 7); ctx.fill();
+    ctx.font = '900 10px system-ui'; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(lv >= 4 ? '★' : lv, x + board.cell * 0.3, y + board.cell * 0.29);
+  }
+}
+
+Game.init({
+  id: 'merge', title: 'しんかチェーン', board, drawPiece, bg: ['#d7f5d0', '#fff3c4'],
+  howto: '<b>同じキャラ・同じレベル</b>を3つ以上なぞると、<b>最後のマスで1段階しんか</b>（6つ以上なら2段階）。<br><b>Lv★（MAX）</b>をタップすると、盤面の<b>同じキャラを全部</b>まきこんで消える！',
+  onStart() { path = null; },
+  onDown(p) {
+    if (board.busy()) return;
+    const cl = hitCell(p); if (!cl) return;
+    const pc = board.get(cl.r, cl.c); if (!pc) return;
+    path = [cl]; pc.sel = true; tone(noteHz(3), 0.06, 'sine', 0.05);
+  },
+  onMove(p) {
+    if (!path) return;
+    const cl = hitCell(p); if (!cl) return;
+    const last = path[path.length - 1], f = board.get(path[0].r, path[0].c);
+    if (same(cl, last)) return;
+    if (path.length >= 2 && same(cl, path[path.length - 2])) { board.get(last.r, last.c).sel = false; path.pop(); return; }
+    const pc = board.get(cl.r, cl.c);
+    if (!pc || pc.t !== f.t || pc.lv !== f.lv || f.lv >= 4 || !adj(cl, last) || path.some(q => same(q, cl))) return;
+    path.push(cl); pc.sel = true; tone(noteHz(3 + path.length), 0.06, 'sine', 0.05);
+  },
+  onUp() {
+    if (!path) return;
+    const pth = path; path = null; unselect();
+    const first = board.get(pth[0].r, pth[0].c);
+    // Lv★をタップ → 同じキャラ全部
+    if (pth.length === 1 && first && first.lv >= 4) {
+      const t = first.t, cells = board.all().filter(q => q.p.t === t);
+      const { x, y } = board.pos(pth[0].r, pth[0].c);
+      S.st.bombs++; flash(0.6, '255,245,170'); shake(10); burst(x, y, '#fff36b', 40, 320);
+      const n = board.remove(cells, 0.02);
+      Game.scoreClear(n, x, y, 2, MASCOTS[t].name + 'ぜんぶ');
+      banner(MASCOTS[t].name + ' ぜんぶ!', MASCOTS[t].c, 44, n + '体まとめて');
+      board.collapse(); return;
+    }
+    if (pth.length < 3) return;
+    const last = pth[pth.length - 1], keep = board.get(last.r, last.c);
+    const up = pth.length >= 6 ? 2 : 1, newLv = Math.min(4, keep.lv + up);
+    const { x, y } = board.pos(last.r, last.c);
+    const n = board.remove(pth.slice(0, -1));
+    keep.lv = newLv; keep.s = 0.4;
+    Game.scoreClear(n + 1, x, y, 1 + (newLv - 1) * 0.5, 'Lv' + (newLv >= 4 ? '★' : newLv));
+    burst(x, y, MASCOTS[keep.t].c, 16, 200);
+    if (newLv >= 4) { banner('MAXしんか!', '#ffb000', 44, 'タップで同じキャラ全消し'); tone(1046, 0.4, 'triangle', 0.1); }
+    board.collapse();
+  },
+  drawExtra(ctx) {
+    if (!path || path.length < 2) return;
+    const pts = path.map(q => board.pos(q.r, q.c)), col = MASCOTS[board.get(path[0].r, path[0].c).t].c;
+    for (const [w, s] of [[14, '#fff'], [8, col]]) {
+      ctx.strokeStyle = s; ctx.lineWidth = w; ctx.lineCap = ctx.lineJoin = 'round';
+      ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.stroke();
+    }
+    const e = pts[pts.length - 1], lv = board.get(path[0].r, path[0].c).lv;
+    outlineText(ctx, path.length >= 3 ? `→ Lv${Math.min(4, lv + (path.length >= 6 ? 2 : 1)) >= 4 ? '★' : Math.min(4, lv + (path.length >= 6 ? 2 : 1))}` : path.length, e.x, e.y - 30, 16, '#fff', 4);
+  },
+});
+</script></body></html>
